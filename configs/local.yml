@@ -1,0 +1,24 @@
+app:
+  name: staffy-sso
+  version: 0.0.1
+  env: dev
+server:
+  grpc:
+    port: 50051
+    host: localhost
+    protocol: tcp
+  rw_timeout: 2s
+secrets:
+  jwt:
+    ttl: 168h
+    key: ${SECRET_KEY}
+  postgres:
+    dsn: ${DATABASE_URL}
+    max_open_conn: 15
+    max_idle_conn: 5
+    conn_max_lifetime: 30m
+  redis:
+    ttl: 10m
+    addr: localhost:6379
+    db: 0
+    password: ${REDIS_PASSWORD}
