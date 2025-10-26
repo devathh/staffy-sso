@@ -19,6 +19,11 @@ secrets:
     conn_max_lifetime: 30m
   redis:
     ttl: 10m
-    addr: localhost:6379
+    addr: ${REDIS_ADDR}
     db: 0
     password: ${REDIS_PASSWORD}
+  clickhouse:
+    addr: ${CLICKHOUSE_ADDR}
+    password: ${CLICKHOUSE_PASSWORD}
+    username: ${CLICKHOUSE_USERNAME}
+    database: ${CLICKHOUSE_DATABASE}

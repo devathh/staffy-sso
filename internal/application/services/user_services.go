@@ -10,14 +10,15 @@ import (
 	"strings"
 	"time"
 
+	staffy "github.com/devathh/staffy-proto/gen/go"
 	domainCache "github.com/devathh/staffy-sso/internal/domain/cache"
+	"github.com/devathh/staffy-sso/internal/domain/observability"
 	domain "github.com/devathh/staffy-sso/internal/domain/user"
 	"github.com/devathh/staffy-sso/internal/infrastructure/config"
 	"github.com/devathh/staffy-sso/internal/lib/jwt"
 	"github.com/devathh/staffy-sso/pkg/consts"
 	"github.com/google/uuid"
-
-	staffy "github.com/devathh/staffy-proto/gen/go"
+	"google.golang.org/grpc/codes"
 )
 
 type ssoService struct {
@@ -26,6 +27,7 @@ type ssoService struct {
 	cache       domainCache.UserCache
 	jwt         *jwt.JWT
 	cfg         *config.Config
+	ch          observability.UserCH
 }
 
 type SSOService interface {
@@ -41,15 +43,11 @@ func (s *ssoService) GetUserByToken(ctx context.Context, token *staffy.Token) (*
 		return nil, consts.ErrNilToken
 	}
 
-	tokenString := strings.TrimSpace(token.GetToken())
-	if tokenString == "" {
-		return nil, consts.ErrNilToken
-	}
+	start := time.Now().UTC()
 
-	claims, err := s.jwt.ValidateToken(tokenString)
+	claims, err := s.getClaimsFromToken(token)
 	if err != nil {
-		s.log.Warn("invalid token detected", slog.String("error", err.Error()))
-		return nil, consts.ErrInvalidToken
+		return nil, err
 	}
 
 	ctxTimeout, cancel := context.WithTimeout(ctx, s.cfg.Server.RWTimeout)
@@ -63,6 +61,7 @@ func (s *ssoService) GetUserByToken(ctx context.Context, token *staffy.Token) (*
 			return nil, consts.ErrInvalidToken
 		}
 
+		go s.saveLog(context.TODO(), staffy.SSO_GetUserByToken_FullMethodName, time.Since(start), int(codes.OK), true)
 		return s.toStaffyUser(user), nil
 	}
 
@@ -91,6 +90,7 @@ func (s *ssoService) GetUserByToken(ctx context.Context, token *staffy.Token) (*
 		}
 	}()
 
+	go s.saveLog(context.TODO(), staffy.SSO_GetUserByToken_FullMethodName, time.Since(start), int(codes.OK), false)
 	return s.toStaffyUser(user), nil
 }
 
@@ -98,6 +98,8 @@ func (s *ssoService) Login(ctx context.Context, req *staffy.LoginRequest) (*staf
 	if req == nil {
 		return nil, consts.ErrNilRequest
 	}
+
+	start := time.Now().UTC()
 
 	// Converting arguments to normal form
 	email, password := strings.TrimSpace(req.GetEmail()), strings.TrimSpace(req.GetPassword())
@@ -116,6 +118,7 @@ func (s *ssoService) Login(ctx context.Context, req *staffy.LoginRequest) (*staf
 			return nil, consts.ErrInvalidCredentials
 		}
 
+		go s.saveLog(context.TODO(), staffy.SSO_Login_FullMethodName, time.Since(start), int(codes.OK), true)
 		return s.toAuthResponse(user)
 	}
 
@@ -141,6 +144,7 @@ func (s *ssoService) Login(ctx context.Context, req *staffy.LoginRequest) (*staf
 		}
 	}()
 
+	go s.saveLog(context.TODO(), staffy.SSO_Login_FullMethodName, time.Since(start), int(codes.OK), false)
 	return s.toAuthResponse(user)
 }
 
@@ -148,6 +152,8 @@ func (s *ssoService) Register(ctx context.Context, req *staffy.RegisterRequest) 
 	if req == nil {
 		return nil, consts.ErrNilRequest
 	}
+
+	start := time.Now().UTC()
 
 	email, err := domain.NewEmail(strings.TrimSpace(req.GetEmail()))
 	if err != nil {
@@ -174,6 +180,7 @@ func (s *ssoService) Register(ctx context.Context, req *staffy.RegisterRequest) 
 		return nil, consts.ErrDatabase
 	}
 
+	go s.saveLog(context.TODO(), staffy.SSO_Register_FullMethodName, time.Since(start), int(codes.OK), false)
 	return s.toAuthResponse(
 		domain.FromPersistence(id,
 			email,
@@ -189,6 +196,8 @@ func (s *ssoService) Delete(ctx context.Context, token *staffy.Token) (*staffy.S
 	if token == nil {
 		return nil, consts.ErrNilToken
 	}
+
+	start := time.Now().UTC()
 
 	tokenString := strings.TrimSpace(token.GetToken())
 	if tokenString == "" {
@@ -213,6 +222,7 @@ func (s *ssoService) Delete(ctx context.Context, token *staffy.Token) (*staffy.S
 		return nil, consts.ErrDatabase
 	}
 
+	go s.saveLog(context.TODO(), staffy.SSO_Delete_FullMethodName, time.Since(start), int(codes.OK), false)
 	return &staffy.StatusResponse{
 		Timestamp:     time.Now().UTC().Unix(),
 		StatusCode:    http.StatusOK,
@@ -224,6 +234,8 @@ func (s *ssoService) Refresh(ctx context.Context, token *staffy.Token) (*staffy.
 	if token == nil {
 		return nil, consts.ErrNilToken
 	}
+
+	start := time.Now().UTC()
 
 	tokenString := strings.TrimSpace(token.GetToken())
 	if tokenString == "" {
@@ -242,6 +254,7 @@ func (s *ssoService) Refresh(ctx context.Context, token *staffy.Token) (*staffy.
 		return nil, consts.ErrGenerateToken
 	}
 
+	go s.saveLog(context.TODO(), staffy.SSO_Refresh_FullMethodName, time.Since(start), int(codes.OK), false)
 	return &staffy.Token{
 		Token: newToken,
 	}, nil
@@ -318,12 +331,38 @@ func (s *ssoService) saveUserToCacheByEmail(user *domain.User) error {
 	return nil
 }
 
-func NewSSOService(cfg *config.Config, log *slog.Logger, persistence domain.UserRepository, cache domainCache.UserCache, jwt *jwt.JWT) SSOService {
+func (s *ssoService) getClaimsFromToken(token *staffy.Token) (*jwt.CustomClaims, error) {
+	tokenString := strings.TrimSpace(token.GetToken())
+	if tokenString == "" {
+		return nil, consts.ErrNilToken
+	}
+
+	claims, err := s.jwt.ValidateToken(tokenString)
+	if err != nil {
+		s.log.Warn("invalid token detected", slog.String("error", err.Error()))
+		return nil, consts.ErrInvalidToken
+	}
+
+	return claims, nil
+}
+
+func (s *ssoService) saveLog(ctx context.Context, endpoint string, duration time.Duration, code int, cacheHit bool) {
+	performanceLog := observability.PerformanceLog{
+		Endpoint:   endpoint,
+		Duration:   duration,
+		StatusCode: code,
+		CacheHit:   cacheHit,
+	}
+	s.ch.SavePerformanceLog(ctx, &performanceLog)
+}
+
+func NewSSOService(cfg *config.Config, log *slog.Logger, persistence domain.UserRepository, cache domainCache.UserCache, ch observability.UserCH, jwt *jwt.JWT) SSOService {
 	return &ssoService{
 		log:         log,
 		persistence: persistence,
 		cache:       cache,
 		jwt:         jwt,
 		cfg:         cfg,
+		ch:          ch,
 	}
 }

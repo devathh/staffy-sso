@@ -1,3 +1,4 @@
+// Package server realizes start-stop methods
 package server
 
 import (

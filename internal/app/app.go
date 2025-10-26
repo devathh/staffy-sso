@@ -1,3 +1,4 @@
+// Package app is DI-container (roughly speaking)
 package app
 
 import (
@@ -10,6 +11,7 @@ import (
 	"github.com/devathh/staffy-sso/internal/application/services"
 	"github.com/devathh/staffy-sso/internal/infrastructure/cache/redis"
 	"github.com/devathh/staffy-sso/internal/infrastructure/config"
+	"github.com/devathh/staffy-sso/internal/infrastructure/observability/clickhouse"
 	"github.com/devathh/staffy-sso/internal/infrastructure/persistence/postgres"
 	"github.com/devathh/staffy-sso/internal/infrastructure/server"
 	"github.com/devathh/staffy-sso/internal/infrastructure/server/handlers"
@@ -78,7 +80,19 @@ func SetupApp() (*App, func(), error) {
 		return nil, nil, fmt.Errorf("failed to init user's cache: %w", err)
 	}
 
-	service := services.NewSSOService(cfg, log, ur, uc, jwtGenerator)
+	connClickhouse, err := clickhouse.ConnectToCH(context.Background(), cfg)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to connect to ch: %w", err)
+	}
+	if err := clickhouse.NewMigrator(log, connClickhouse).Migrate(context.TODO()); err != nil {
+		return nil, nil, fmt.Errorf("error with clickhouse migrations: %w", err)
+	}
+	ch, err := clickhouse.NewUserCH(log, connClickhouse)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create user clickhouse: %w", err)
+	}
+
+	service := services.NewSSOService(cfg, log, ur, uc, ch, jwtGenerator)
 	handler := handlers.NewHandler(service)
 	grpcServer := grpc.NewServer()
 	staffy.RegisterSSOServer(grpcServer, handler)
@@ -95,6 +109,12 @@ func SetupApp() (*App, func(), error) {
 			log.Warn("failed to close connection with redis", slog.String("error", err.Error()))
 		} else {
 			log.Info("redis connection was closed")
+		}
+
+		if err := clickhouse.Close(connClickhouse); err != nil {
+			log.Warn("failed to close connection with clickhouse", slog.String("error", err.Error()))
+		} else {
+			log.Info("clickhouse connection was closed")
 		}
 	}
 

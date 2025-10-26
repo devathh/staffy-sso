@@ -1,3 +1,4 @@
+// Package jwt implements structure, that generates n' validates jwt-token
 package jwt
 
 import (

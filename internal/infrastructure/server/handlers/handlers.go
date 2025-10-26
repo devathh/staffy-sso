@@ -1,3 +1,4 @@
+// Package handlers implements the mechanics of interaction between endpoints and services
 package handlers
 
 import (

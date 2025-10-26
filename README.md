@@ -115,6 +115,7 @@ Generates new JWT token while maintaining user session.
 - **JWT** - JSON Web Tokens for authentication
 - **PostgreSQL** - Primary data storage
 - **Redis** - Caching layer for performance
+- **ClickHouse** - for analytical data
 - **Go** - Backend programming language
 
 ## Error Handling

@@ -44,6 +44,13 @@ type redis struct {
 	Password string        `yaml:"password"`
 }
 
+type clickhouse struct {
+	Database string `yaml:"database"`
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+	Addr     string `yaml:"addr"`
+}
+
 type Config struct {
 	App    app `yaml:"app"`
 	Server struct {
@@ -51,9 +58,10 @@ type Config struct {
 		RWTimeout time.Duration `yaml:"rw_timeout" env-default:"2s"`
 	} `yaml:"server"`
 	Secrets struct {
-		JWT      jwt      `yaml:"jwt"`
-		Postgres postgres `yaml:"postgres"`
-		Redis    redis    `yaml:"redis"`
+		JWT        jwt        `yaml:"jwt"`
+		Postgres   postgres   `yaml:"postgres"`
+		Redis      redis      `yaml:"redis"`
+		Clickhouse clickhouse `yaml:"clickhouse"`
 	} `yaml:"secrets"`
 }
 
