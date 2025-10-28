@@ -16,7 +16,6 @@ secrets:
     dsn: ${DATABASE_URL}
     max_open_conn: 15
     max_idle_conn: 5
-    conn_max_lifetime: 30m
   redis:
     ttl: 10m
     addr: ${REDIS_ADDR}

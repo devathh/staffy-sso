@@ -28,7 +28,6 @@ func ConnectToDB(cfg *config.Config) (*gorm.DB, error) {
 
 	sqlDB.SetMaxIdleConns(cfg.Secrets.Postgres.MaxIdleConn)
 	sqlDB.SetMaxOpenConns(cfg.Secrets.Postgres.MaxOpenConn)
-	sqlDB.SetConnMaxLifetime(cfg.Secrets.Postgres.ConnMaxLifetime)
 
 	if err := sqlDB.Ping(); err != nil {
 		return nil, fmt.Errorf("failed to ping: %w", err)

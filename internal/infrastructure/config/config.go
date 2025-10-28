@@ -31,10 +31,9 @@ type jwt struct {
 }
 
 type postgres struct {
-	DSN             string        `yaml:"dsn"`
-	MaxOpenConn     int           `yaml:"max_open_conn" env-default:"15"`
-	MaxIdleConn     int           `yaml:"max_idle_conn" env-default:"5"`
-	ConnMaxLifetime time.Duration `yaml:"conn_max_lifetime" env-default:"30m"`
+	DSN         string `yaml:"dsn"`
+	MaxOpenConn int    `yaml:"max_open_conn" env-default:"15"`
+	MaxIdleConn int    `yaml:"max_idle_conn" env-default:"5"`
 }
 
 type redis struct {
